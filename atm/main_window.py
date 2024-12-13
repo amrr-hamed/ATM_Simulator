@@ -116,104 +116,10 @@ class ATMApp:
         ATMUI(atm_window, self.manager, location, atm_id)
         
         
-        
-        
-    def measure_transaction_performance(self):
-    
-        """Compare performance of single-threaded vs multi-threaded transactions"""
-    
-        def single_threaded_transactions():
-            for _ in range(50):  # Simulate 50 transactions
-                account_id = random.randint(1, 10)  # Assuming account IDs 1-10
-                amount = random.uniform(10, 500)
-                transaction_type = random.choice(['deposit', 'withdraw'])
-                
-                if transaction_type == 'deposit':
-                    self.manager.deposit(account_id, amount)
-                else:
-                    try:
-                        # Assuming ATM ID 1 for simplicity
-                        self.manager.withdraw(account_id, amount, 1)
-                    except ValueError as e:
-                        print(f"Withdrawal error: {e}")
-
-        def multi_threaded_transactions():
-            with ThreadPoolExecutor(max_workers=5) as executor:
-                futures = []
-                for _ in range(50):
-                    account_id = random.randint(1, 10)
-                    amount = random.uniform(10, 500)
-                    transaction_type = random.choice(['deposit', 'withdraw'])
-                    
-                    if transaction_type == 'deposit':
-                        futures.append(executor.submit(self.manager.deposit, account_id, amount))
-                    else:
-                        futures.append(executor.submit(self.manager.withdraw, account_id, amount, 1))
-                
-                # Wait for all futures to complete
-                for future in futures:
-                    future.result()
-
-        # Measure single-threaded performance
-        start_time = time.time()
-        single_threaded_transactions()
-        single_threaded_time = time.time() - start_time
-
-        # Measure multi-threaded performance
-        start_time = time.time()
-        multi_threaded_transactions()
-        multi_threaded_time = time.time() - start_time
-
-        print(f"Single-threaded Transaction Time: {single_threaded_time:.4f} seconds")
-        print(f"Multi-threaded Transaction Time: {multi_threaded_time:.4f} seconds")
-        print(f"Performance Improvement: {(single_threaded_time / multi_threaded_time - 1) * 100:.2f}%")
-        
-        
-    def stress_test_transactions(self):
-        """
-        Simulate a high-concurrency scenario with multiple threads
-        """
-        def simulate_random_transaction():
-            try:
-                # Randomly choose transaction type
-                transaction_type = random.choice(['deposit', 'withdraw'])
-                account_id = random.randint(1, 10)  # Assuming account IDs 1-10
-                amount = random.uniform(10, 500)
-                
-                if transaction_type == 'deposit':
-                    self.manager.deposit(account_id, amount)
-                    print(f"Thread {threading.current_thread().name}: Deposited ${amount} to Account {account_id}")
-                else:
-                    # Assuming ATM ID 1 for simplicity
-                    self.manager.withdraw(account_id, amount, 1)
-                    print(f"Thread {threading.current_thread().name}: Withdrew ${amount} from Account {account_id}")
-            
-            except ValueError as e:
-                print(f"Transaction Error in {threading.current_thread().name}: {e}")
-
-        # Create and start multiple threads
-        threads = []
-        num_threads = 20  # Simulate 20 concurrent transactions
-        
-        for _ in range(num_threads):
-            thread = threading.Thread(target=simulate_random_transaction)
-            threads.append(thread)
-            thread.start()
-        
-        # Wait for all threads to complete
-        for thread in threads:
-            thread.join()
-
-        print("Stress test completed.")       
-
-
 if __name__ == "__main__":
-    app = ATMApp()
+    app = ATMApp()    
+        
+  
 
-    print("Testing Measure Transaction Performance:")
-    app.measure_transaction_performance()
-    print("\n")
 
-    print("Testing Stress Test Transactions:")
-    app.stress_test_transactions()
 

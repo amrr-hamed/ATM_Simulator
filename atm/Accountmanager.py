@@ -1,6 +1,6 @@
 import threading
 import sqlite3
-from account import Account
+
 from transaction import Transaction
       
 import sqlite3

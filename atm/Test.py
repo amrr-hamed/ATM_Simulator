@@ -1,109 +1,192 @@
 import time
 import random
+import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 import matplotlib.pyplot as plt
 from statistics import mean
+from datetime import datetime
 
-def simulate_transaction_time():
-    """Simulate a transaction without database interaction"""
-    # Simulate some processing time
-    time.sleep(random.uniform(0.1, 0.3))
-    return True
-
-def test_atm_performance(num_transactions=100, num_threads=4):
-    """
-    Test ATM performance comparing sequential vs parallel execution
-    without actual database operations
-    """
-    print(f"\nTesting with {num_transactions} transactions...")
-    
-    # Sequential Test
-    print("\nRunning Sequential Test...")
-    sequential_times = []
-    sequential_start = time.time()
-    
-    for _ in range(num_transactions):
-        trans_start = time.time()
-        simulate_transaction_time()
-        sequential_times.append(time.time() - trans_start)
-    
-    sequential_total = time.time() - sequential_start
-    
-    # Parallel Test
-    print("Running Parallel Test...")
-    parallel_times = []
-    parallel_start = time.time()
-    
-    with ThreadPoolExecutor(max_workers=num_threads) as executor:
-        # Submit all tasks at once
-        futures = [executor.submit(simulate_transaction_time) 
-                  for _ in range(num_transactions)]
+class ATMPerformanceTester:
+    def __init__(self, db_name="atm_simulator.db"):
+        self.db_name = db_name
+        # Get active ATM IDs from database
+        self.active_atm_ids = self._get_active_atm_ids()
+        self.account_ids = self._get_all_account_ids()
         
-        # Wait for completion and record times
-        for future in futures:
-            start_time = time.time()
-            future.result()
-            parallel_times.append(time.time() - start_time)
+    def _get_active_atm_ids(self):
+        """Fetch active ATM IDs from database"""
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute("SELECT atm_id FROM atms WHERE status = 'Active'")
+        atm_ids = [row[0] for row in cursor.fetchall()]
+        conn.close()
+        return atm_ids
     
-    parallel_total = time.time() - parallel_start
-    
-    # Calculate and display results
-    results = {
-        'Sequential': {
-            'total_time': sequential_total,
-            'avg_time': mean(sequential_times),
-            'max_time': max(sequential_times),
-            'min_time': min(sequential_times)
-        },
-        'Parallel': {
-            'total_time': parallel_total,
-            'avg_time': mean(parallel_times),
-            'max_time': max(parallel_times),
-            'min_time': min(parallel_times)
+    def _get_all_account_ids(self):
+        """Fetch all account IDs from database"""
+        conn = sqlite3.connect(self.db_name)
+        cursor = conn.cursor()
+        cursor.execute("SELECT account_id FROM accounts")
+        account_ids = [row[0] for row in cursor.fetchall()]
+        conn.close()
+        return account_ids
+
+    def _generate_transaction(self):
+        """Generate a random realistic transaction"""
+        account_id = random.choice(self.account_ids)
+        atm_id = random.choice(self.active_atm_ids)
+        amount = round(random.uniform(10, 500), 2)
+        transaction_type = random.choice(['deposit', 'withdraw'])
+        return (account_id, atm_id, transaction_type, amount)
+
+    def _process_transaction(self, transaction_data):
+        """Process a single transaction"""
+        account_id, atm_id, transaction_type, amount = transaction_data
+        start_time = time.time()
+        
+        try:
+            conn = sqlite3.connect(self.db_name)
+            cursor = conn.cursor()
+            
+            # Get current balance
+            cursor.execute("SELECT balance FROM accounts WHERE account_id = ?", (account_id,))
+            current_balance = cursor.fetchone()[0]
+            
+            # Process transaction
+            if transaction_type == 'withdraw' and current_balance < amount:
+                raise ValueError("Insufficient funds")
+            
+            new_balance = current_balance + amount if transaction_type == 'deposit' else current_balance - amount
+            
+            # Update balance
+            cursor.execute("""
+                UPDATE accounts 
+                SET balance = ? 
+                WHERE account_id = ?
+            """, (new_balance, account_id))
+            
+            # Log transaction
+            cursor.execute("""
+                INSERT INTO transactions (account_id, atm_id, transaction_type, amount)
+                VALUES (?, ?, ?, ?)
+            """, (account_id, atm_id, transaction_type, amount))
+            
+            conn.commit()
+            success = True
+        except Exception as e:
+            success = False
+        finally:
+            conn.close()
+            
+        return {
+            'execution_time': time.time() - start_time,
+            'success': success,
+            'type': transaction_type
         }
-    }
-    
-    # Print results
-    print("\n=== Performance Results ===")
-    print(f"\nNumber of Transactions: {num_transactions}")
-    print(f"Number of Threads: {num_threads}")
-    
-    print("\nSequential Execution:")
-    print(f"Total Time: {results['Sequential']['total_time']:.3f} seconds")
-    print(f"Average Transaction Time: {results['Sequential']['avg_time']*1000:.2f} ms")
-    print(f"Max Transaction Time: {results['Sequential']['max_time']*1000:.2f} ms")
-    print(f"Min Transaction Time: {results['Sequential']['min_time']*1000:.2f} ms")
-    
-    print("\nParallel Execution:")
-    print(f"Total Time: {results['Parallel']['total_time']:.3f} seconds")
-    print(f"Average Transaction Time: {results['Parallel']['avg_time']*1000:.2f} ms")
-    print(f"Max Transaction Time: {results['Parallel']['max_time']*1000:.2f} ms")
-    print(f"Min Transaction Time: {results['Parallel']['min_time']*1000:.2f} ms")
-    
-    speedup = results['Sequential']['total_time'] / results['Parallel']['total_time']
-    print(f"\nSpeedup Factor: {speedup:.2f}x")
-    
-    # Create visualization
-    plt.figure(figsize=(10, 6))
-    plt.bar(['Sequential', 'Parallel'], 
-            [results['Sequential']['total_time'], results['Parallel']['total_time']])
-    plt.title('Transaction Processing Time Comparison')
-    plt.ylabel('Total Time (seconds)')
-    plt.grid(True, axis='y')
-    
-    # Add time labels on top of bars
-    for i, v in enumerate([results['Sequential']['total_time'], 
-                          results['Parallel']['total_time']]):
-        plt.text(i, v, f'{v:.3f}s', ha='center', va='bottom')
-    
-    plt.show()
-    
-    return results
+
+    def run_performance_test(self, num_transactions=100, num_threads=4):
+        """Run performance comparison between sequential and parallel processing"""
+        print(f"\nStarting performance test with {num_transactions} transactions...")
+        
+        # Generate test transactions
+        transactions = [self._generate_transaction() for _ in range(num_transactions)]
+        
+        # Sequential Test
+        print("\nRunning Sequential Test...")
+        sequential_start = time.time()
+        sequential_results = []
+        
+        for transaction in transactions:
+            result = self._process_transaction(transaction)
+            sequential_results.append(result)
+        
+        sequential_total = time.time() - sequential_start
+        
+        # Parallel Test
+        print("Running Parallel Test...")
+        parallel_start = time.time()
+        
+        with ThreadPoolExecutor(max_workers=num_threads) as executor:
+            parallel_results = list(executor.map(self._process_transaction, transactions))
+            
+        parallel_total = time.time() - parallel_start
+        
+        # Calculate metrics
+        self._analyze_results(sequential_results, parallel_results, 
+                            sequential_total, parallel_total,
+                            num_transactions, num_threads)
+
+    def _analyze_results(self, sequential_results, parallel_results, 
+                        sequential_total, parallel_total,
+                        num_transactions, num_threads):
+        """Analyze and display test results"""
+        
+        def calculate_metrics(results, total_time):
+            successful = [r for r in results if r['success']]
+            times = [r['execution_time'] for r in results]
+            return {
+                'total_time': total_time,
+                'success_rate': len(successful) / len(results) * 100,
+                'avg_time': mean(times) if times else 0,
+                'max_time': max(times) if times else 0,
+                'min_time': min(times) if times else 0
+            }
+
+        seq_metrics = calculate_metrics(sequential_results, sequential_total)
+        par_metrics = calculate_metrics(parallel_results, parallel_total)
+
+        # Print results
+        print("\n=== Performance Test Results ===")
+        print(f"\nConfiguration:")
+        print(f"Number of Transactions: {num_transactions}")
+        print(f"Number of Threads: {num_threads}")
+        print(f"Active ATMs: {len(self.active_atm_ids)}")
+        
+        print("\nSequential Execution:")
+        print(f"Total Time: {seq_metrics['total_time']:.3f} seconds")
+        print(f"Success Rate: {seq_metrics['success_rate']:.1f}%")
+        print(f"Average Transaction Time: {seq_metrics['avg_time']*1000:.2f} ms")
+        print(f"Max Transaction Time: {seq_metrics['max_time']*1000:.2f} ms")
+        print(f"Min Transaction Time: {seq_metrics['min_time']*1000:.2f} ms")
+        
+        print("\nParallel Execution:")
+        print(f"Total Time: {par_metrics['total_time']:.3f} seconds")
+        print(f"Success Rate: {par_metrics['success_rate']:.1f}%")
+        print(f"Average Transaction Time: {par_metrics['avg_time']*1000:.2f} ms")
+        print(f"Max Transaction Time: {par_metrics['max_time']*1000:.2f} ms")
+        print(f"Min Transaction Time: {par_metrics['min_time']*1000:.2f} ms")
+        
+        speedup = seq_metrics['total_time'] / par_metrics['total_time']
+        print(f"\nSpeedup Factor: {speedup:.2f}x")
+        
+        # Create visualization
+        self._plot_results(seq_metrics, par_metrics)
+
+    def _plot_results(self, seq_metrics, par_metrics):
+        """Create performance visualization"""
+        plt.figure(figsize=(12, 6))
+        
+        # Plot total times
+        times = [seq_metrics['total_time'], par_metrics['total_time']]
+        plt.bar(['Sequential', 'Parallel'], times)
+        
+        plt.title('ATM Transaction Processing Performance')
+        plt.ylabel('Total Execution Time (seconds)')
+        plt.grid(True, axis='y')
+        
+        # Add value labels on bars
+        for i, v in enumerate(times):
+            plt.text(i, v, f'{v:.3f}s', ha='center', va='bottom')
+        
+        plt.show()
 
 if __name__ == "__main__":
-    # Test with different scenarios
-    print("Testing with 300 transactions and 30 threads")
-    results1 = test_atm_performance(num_transactions=200, num_threads=5)
+    # Create and run performance test
+    tester = ATMPerformanceTester()
     
-    print("\nTesting with 500 transactions and 50 threads")
-    #results2 = test_atm_performance(num_transactions=500, num_threads=50)
+    # Run test with different configurations
+    print("Test 1: 1000 transactions with 50 threads")
+    tester.run_performance_test(num_transactions=10000, num_threads=5000)
+    
+    print("\nTest 2: 200 transactions with 8 threads")
+    #tester.run_performance_test(num_transactions=200, num_threads=8)
