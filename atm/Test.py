@@ -102,8 +102,8 @@ def test_atm_performance(num_transactions=100, num_threads=4):
 
 if __name__ == "__main__":
     # Test with different scenarios
-    print("Testing with 100 transactions and 4 threads")
-    results1 = test_atm_performance(num_transactions=100, num_threads=4)
+    print("Testing with 300 transactions and 30 threads")
+    results1 = test_atm_performance(num_transactions=200, num_threads=5)
     
-    print("\nTesting with 200 transactions and 8 threads")
-    results2 = test_atm_performance(num_transactions=200, num_threads=8)
+    print("\nTesting with 500 transactions and 50 threads")
+    #results2 = test_atm_performance(num_transactions=500, num_threads=50)
