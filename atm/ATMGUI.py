@@ -251,7 +251,7 @@ class ATMUI:
                 self.account_manager.withdraw(card_number, amount, self.atm_id)
                 self.show_message(f"Withdrawal of ${amount:.2f} successful!", parent, 'green')
             else:  # deposit
-                self.account_manager.deposit(card_number, amount)
+                self.account_manager.deposit(card_number, amount,self.atm_id)
                 self.show_message(f"Deposit of ${amount:.2f} successful!", parent, 'green')
 
             # Optionally return to the main menu after a delay

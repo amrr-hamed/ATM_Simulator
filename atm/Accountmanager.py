@@ -1,7 +1,7 @@
 import threading
 import sqlite3
 
-from transaction import Transaction
+#from transaction import Transaction
       
 import sqlite3
 import threading
@@ -50,18 +50,23 @@ class AccountManager:
             print(f"Error retrieving balance for account {account_id}: {e}")
             return None
 
-    def deposit(self, account_id, amount):
-        """Deposits an amount into an account."""
+    def deposit(self, account_id, amount, atm_id):
+        """Deposits an amount into an account and updates the ATM cash level."""
         if amount <= 0:
             raise ValueError("Deposit amount must be greater than zero.")
 
-        # Update the balance
+        # Update the account balance
         update_query = "UPDATE accounts SET balance = balance + ? WHERE account_id = ?"
         self.execute_query(update_query, (amount, account_id))
+
+        # Update the ATM cash level
+        update_atm_query = "UPDATE atms SET cash_level = cash_level + ? WHERE atm_id = ?"
+        self.execute_query(update_atm_query, (amount, atm_id))
 
         # Log the transaction
         log_query = "INSERT INTO transactions (account_id, transaction_type, amount) VALUES (?, 'Deposit', ?)"
         self.execute_query(log_query, (account_id, amount))
+
 
     def withdraw(self, account_id, amount, atm_id):
         """Withdraws an amount from an account, considering ATM cash levels."""
